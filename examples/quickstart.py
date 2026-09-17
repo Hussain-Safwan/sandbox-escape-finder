@@ -30,7 +30,7 @@ def build_corpus(filenames):
 if __name__ == '__main__':
     config = {}
 
-    stat = 0
+    stat = 1
     with open(CONFIG_PATH, 'r') as config_file:
         config = json.load(config_file)
 
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     filenames = [str(f) for f in corpus_path.iterdir() if f.is_file()]
     corpus = build_corpus(filenames)
     
-    sc = next((item for item in corpus if item.get("id") == "2_get_shell"), None)
+    sc = next((item for item in corpus if item.get("id") == "5_format"), None)
     
     if (stat==0):
         analyzer = StaticAnalyzer(config)

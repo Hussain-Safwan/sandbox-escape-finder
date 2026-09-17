@@ -128,10 +128,10 @@ class ASTWrapper(ast.NodeVisitor):
     
     def inspect_file_io(self, node):
         file_io_detected = False
-        if isinstance(node.func, ast.Name) and node.func.id in FILE_BUILTINS:
+        if isinstance(node.func, ast.Name) and node.func.id in file_builtins:
             file_io_detected = True
 
-        elif isinstance(node.func, ast.Attribute) and node.func.attr in FILE_ATTRIBUTES:
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in file_attributes:
             file_io_detected = True
             
         return file_io_detected

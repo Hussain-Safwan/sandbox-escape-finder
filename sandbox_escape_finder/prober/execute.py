@@ -33,8 +33,8 @@ class Execution:
         self.secret_list = {'SECRET_1': 'XYZ123', 'secret_2': 'CANARY_SECRET_KEY_998123'}
                 
         self.forbidden_attrs = {
-            "__subclasses__", "__globals__", "__closure__", 
-            "__builtins__", "gi_frame", "cr_frame", "ag_frame", "tb_frame"
+            "__subclasses__", "__globals__", "__closure__", "__builtins__", "__metaclass__", 
+            "gi_frame", "cr_frame", "ag_frame", "tb_frame"
         }
         
         self.suspicious_modules = {
@@ -157,7 +157,7 @@ class Execution:
         
         try:
             byte_code = compile_restricted(self.payload, filename="<dynamic_test>", mode="exec")
-        except SyntaxError as e:
+        except Exception as e:
             compile_exception = e
             self.runtime_violations.append({
                 "event": type(compile_exception).__name__,
@@ -171,8 +171,14 @@ class Execution:
             
         except Exception as e:
             runtime_execption = e
-            status = 'BLOCKED/EXCEPTION'
-            if compile_exception == None:
+            status = 'BLOCKED'
+            err_type = type(runtime_execption).__name__
+            if ( err_type == 'NameError' or err_type == 'AttributeError'):
+                self.runtime_violations.append({
+                    "event": "invalid_access_attempt",
+                    "details": str(runtime_execption)
+                })
+            elif compile_exception == None:
                 self.runtime_violations.append({
                     "event": "process_crashed",
                     "details": str(runtime_execption)
