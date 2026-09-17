@@ -99,9 +99,10 @@ class DynamicProber:
             oracle_verdict = self.oracle.run(execution_result, audit_data, violations)
             
             self.report.append({
-                "static_analyzer_verdict": "PASSED" if len(flags) == 0 else "BLOCKED",
+                "static_analyzer_verdict": "PASSED" if len(flags) == 0 else "FLAGGED",
                 "static_analyzer_technique": [flag.technique for flag in flags] if len(flags) > 0 else None,
                 "execution_status": "PASSED" if execution_result.get("status", "") == "SUCCESS" else "BLOCKED",
+                "execution_outcome": execution_result.get("execution_data", ""),
                 "runtime_violations": [v.get("event", "") for v in violations] if len(violations) > 0 else None,
                 "oracle_verdict": oracle_verdict
             })

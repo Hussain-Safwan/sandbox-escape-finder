@@ -111,6 +111,7 @@ class Execution:
                 "module": name,
                 "details": f"Payload imported restricted module: '{name}'"
             })
+            raise SandboxSecurityError(f"[IMPORT_ERROR] Suspicious import attempted")
             
         return __import__(name, globals, locals, fromlist, level)
 

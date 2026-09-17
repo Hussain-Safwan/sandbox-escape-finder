@@ -18,4 +18,11 @@ class Oracle:
         oracle_2_outcome = self.exfil_oracle.verify_impact(execution_data)
         oracle_3_outcome = self.process_oracle.verify_impact(audit_data)
         
-        return oracle_1_outcome or oracle_2_outcome or oracle_3_outcome
+        return {
+            "verdict": oracle_1_outcome or oracle_2_outcome or oracle_3_outcome,
+            "detailts": {
+                "file_io": oracle_1_outcome,
+                "exfil_attempt": oracle_2_outcome,
+                "process_audit": oracle_3_outcome
+            }
+        }
