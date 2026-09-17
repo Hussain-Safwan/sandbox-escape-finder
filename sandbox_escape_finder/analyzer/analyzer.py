@@ -1,5 +1,4 @@
 import ast
-import textwrap
 from string import Formatter
 
 generator_attr = {"f_locals", "f_globals", "f_builtins"}
@@ -7,6 +6,18 @@ generator_values = {"gi_frame", "cr_frame", "ag_frame", "tb_frame"}
 import_blacklist = ['os', 'sys']
 compression_classes = ['base64', 'zlib', 'gzip', 'bz2', 'lzma']
 common_methods = {"print", "open", "input", "eval", "exec"}
+suspicious_modules = {
+            "os", "sys", "subprocess", "shutil", "ctypes", 
+            "importlib", "pathlib", "socket", "threading", "multiprocessing"
+        }
+file_builtins = {"open", "file", "exec", "eval", "compile"}
+    
+file_attributes = {
+        "read", "readline", "readlines", "write", "writelines",
+        "unlink", "remove", "rmdir", "mkdir", "listdir", "walk",
+        "read_text", "read_bytes", "write_text", "write_bytes"
+
+}
 reports = []
 
 class Report():
@@ -115,42 +126,58 @@ class ASTWrapper(ast.NodeVisitor):
             
         return result
     
-    def generic_visit(self, node):
-        details = []
+    def inspect_file_io(self, node):
+        file_io_detected = False
+        if isinstance(node.func, ast.Name) and node.func.id in FILE_BUILTINS:
+            file_io_detected = True
+
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in FILE_ATTRIBUTES:
+            file_io_detected = True
+            
+        return file_io_detected
+    
+    def add_report(self, technique, confidence, node):
         report = Report()
+        
+        report.technique = technique
+        report.confidence = confidence
+        
+        if hasattr(node, "lineno"):
+            src = f"{ast.get_source_segment(self.source, node)!r}"
+            report.source = src
+            report.line = node.lineno
+            report.colum = node.col_offset
+            
+        reports.append(report)
+    
+    def generic_visit(self, node):
 
         if isinstance(node, ast.Name):
-            details.append(f"id={node.id!r}")
+            pass
+        
         elif isinstance(node, ast.Attribute):
-            details.append(f"attr={node.attr!r}")
             # Pattern 1: __subclasses__ access
             if (node.attr == '__subclasses__'):
-                report.technique = 'Subclasses Traversal'
-                report.confidence = 0.3
+                self.add_report('Subclasses Traversal', 0.3, node)
                 
             # Pattern 2: Access function states through __globals__/__closures__
             if (node.attr in {"__globals__", "__closure__"}):
-                report.technique = f'Function-state access ({node.attr})'
-                report.confidence = 0.3
+                self.add_report(f'Function-state access ({node.attr})', 0.3, node)
             
             # Pattern 4: Generator pattern introspection 
             introspection_score = self.inspect_generator_intro(node)
             if (introspection_score > 0.0):
-                report.technique = "Generator/frame introspection"
-                report.confidence = introspection_score
+                self.add_report("Generator/frame introspection", introspection_score, node)
                 
-                    
         elif isinstance(node, ast.Subscript):
             # Pattern 3.1: globals __builtins__ through ["__builtins__"]
             if (self.inspect_builtins_restoration(node, 'subscript')):
-                report.technique = "Builtins restoration"
-                report.confidence = 0.9
+                self.add_report("Builtins restoration", 0.9, node)
                 
         elif isinstance(node, ast.Call):
             # Pattern 3.2: globals __builtins__ through .get("__builtins__")
             if (self.inspect_builtins_restoration(node, 'method')):
-                report.technique = "Builtins restoration"
-                report.confidence = 0.9
+                self.add_report("Builtins restoration", 0.9, node)
                 
             # Pattern 5: Restricted fields through string format
             if (
@@ -158,8 +185,7 @@ class ASTWrapper(ast.NodeVisitor):
                 and node.func.attr == "format"
                 and self.inspect_format_access(node.func.value)
             ):
-                report.technique = 'Format-string attribute'
-                report.confidence = 0.5
+                self.add_report("Format-string attribute", 0.5, node)
             
             # Pattern 6: Check for exec/eval abuse with suspicious imports and compression methods  
             if (
@@ -169,33 +195,33 @@ class ASTWrapper(ast.NodeVisitor):
             ):
                 is_exec_abused = self.inspect_exec_eval_calls(node)
                 if (is_exec_abused):
-                    report.technique = is_exec_abused
-                    report.confidence = 0.5
+                    self.add_report(is_exec_abused, 0.5, node)
+                    
+            # Pattern 9: File Activies
+            if self.inspect_file_io(node):
+                self.add_report('file_access', 0.5, node)
               
         # Pattern 7: Common method override      
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name in common_methods:
-                report.technique = "Builtin shadowing"
-                report.confidence = 0.3
+                self.add_report("Builtin shadowing", 0.3, node)
                                 
             elif isinstance(node, ast.Constant):
-                details.append(f"value={node.value!r}")
-
-        if hasattr(node, "lineno"):
-            src = f"{ast.get_source_segment(self.source, node)!r}"
-            details.append(f"source={src} \nline={node.lineno}, col={node.col_offset}")
-            report.source = src
-            report.line = node.lineno
-            report.colum = node.col_offset
-
-        if report.technique != None:
-            reports.append(report)
-
-        suffix = " | " + ", ".join(details) if details else ""
-        # print("  " * self.depth + type(node).__name__ + suffix)
-        # if len(details) == 0:
-        #     print('\n')
+                pass
             
+        # Pattern 8: Suspicious imports
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            print('Import', [name.name for name in node.names])
+            for alias in node.names:
+                if (alias.name in suspicious_modules):
+                    self.add_report(f"Suspicious import ({alias.name})", 0.9, node)
+                else:
+                    self.add_report(f"Benign import ({alias.name})", 0.3, node)
+                
+            if isinstance(node, ast.ImportFrom):
+                if (node.module in suspicious_modules):
+                    self.add_report(f"Suspicious import ({node.module})", 0.9, node)
+                                    
         self.depth += 1
         super().generic_visit(node)
         self.depth -= 1
