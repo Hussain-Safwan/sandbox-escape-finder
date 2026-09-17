@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from .execute import Execution
 from ..analyzer import StaticAnalyzer
-import textwrap
+from .process_oracle import ProcessAuditHookManager
 
 class HarnessWrapper:
     
@@ -11,19 +11,22 @@ class HarnessWrapper:
         
     def _worker_target(self, payload_code, return_dict):
         try:
+            ProcessAuditHookManager.install()
             executor = Execution(payload_code, self.workspace_dir, self.canary_dir)
-            return_value, violations = executor.execute_payload()
+            return_value = executor.execute_payload()
             
             return_dict["status"] = return_value.get("status")
             return_dict["error"] = return_value.get("error", None)
             return_dict["execution_data"] = return_value.get("execution_data", '')
-            return_dict["violations"] = violations if violations else []
+            return_dict["audit_data"] = return_value.get("audit_data", '')
+            return_dict["violations"] = return_value.get("violations", "")
 
         except Exception as e:
             return_dict["status"] = "BLOCKED/EXCEPTION"
             return_dict["error"] = f"Unhandled Process Exception: {str(e)}"
             return_dict["violations"] = []
-            return_dict["execution_data"] = ''
+            return_dict["execution_data"] = ""
+            return_dict["audit_data"] = ""
 
     def run_isolated_payload(self, payload_code, timeout=2.0):
         manager = mp.Manager()
@@ -88,16 +91,18 @@ class DynamicProber:
                 print(f'[Prober] id={item.get("id")} status=Blocked')
                     
             violations = execution_result.get("violations", [])
+            audit_data = execution_result.get("audit_data", "")
+
             if "violations" in execution_result:
                 del execution_result["violations"]
                     
-            oracle_verdict = self.oracle.run(str(execution_result), violations)
+            oracle_verdict = self.oracle.run(execution_result, audit_data, violations)
             
             self.report.append({
                 "static_analyzer_verdict": "PASSED" if len(flags) == 0 else "BLOCKED",
-                "static_analyzer_technique": flags[0].technique if len(flags) > 0 else None,
+                "static_analyzer_technique": [flag.technique for flag in flags] if len(flags) > 0 else None,
                 "execution_status": "PASSED" if execution_result.get("status", "") == "SUCCESS" else "BLOCKED",
-                "runtime_violations": violations[0].get("event", "") if len(violations) > 0 else None,
+                "runtime_violations": [v.get("event", "") for v in violations] if len(violations) > 0 else None,
                 "oracle_verdict": oracle_verdict
             })
             

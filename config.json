@@ -1,8 +1,8 @@
 {
     "timeout": 2.0,
     "workspace_dir": ".",
-    "canary_dir": "C:\\canary_temp",
-    "corpus_path": "G:\\Projects\\sandbox-escape-finder\\corpus",
+    "canary_dir": "./canary",
+    "corpus_path": "./corpus",
     "secrets": {
         "SECRET_1": "XYZ123", 
         "SECRET_2": "CANARY_SECRET_KEY_998123"

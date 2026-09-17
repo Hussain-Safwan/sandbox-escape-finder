@@ -6,6 +6,8 @@ from sandbox_escape_finder import StaticAnalyzer, DynamicProber
 from sandbox_escape_finder.prober import HarnessWrapper
 from sandbox_escape_finder.prober.oracle import Oracle
 
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+
 def get_payload(filename):
     source_code = ''
     with open(filename, "r") as file:
@@ -29,14 +31,14 @@ if __name__ == '__main__':
     config = {}
 
     stat = 1
-    with open('../config.json', 'r') as config_file:
+    with open(CONFIG_PATH, 'r') as config_file:
         config = json.load(config_file)
-    
+
     corpus_path = Path(config.get("corpus_path"))
     filenames = [str(f) for f in corpus_path.iterdir() if f.is_file()]
     corpus = build_corpus(filenames)
     
-    sc = next((item for item in corpus if item.get("id") == "1_subclasses"), None)
+    sc = next((item for item in corpus if item.get("id") == "13_subprocess"), None)
     
     if (stat==0):
         analyzer = StaticAnalyzer(config)
