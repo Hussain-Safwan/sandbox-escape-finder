@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sandbox_escape_finder"
+version = "0.1.0"
+description = "Multi-layered security Oracle and AST analyzer for Python sandbox escape detection."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "RestrictedPython>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

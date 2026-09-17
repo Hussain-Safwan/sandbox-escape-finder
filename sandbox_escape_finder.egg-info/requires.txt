@@ -1,0 +1,4 @@
+RestrictedPython>=6.0
+
+[dev]
+pytest>=7.0.0

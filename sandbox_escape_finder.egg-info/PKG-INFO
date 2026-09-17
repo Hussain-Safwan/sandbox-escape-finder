@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: sandbox_escape_finder
+Version: 0.1.0
+Summary: Multi-layered security Oracle and AST analyzer for Python sandbox escape detection.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: RestrictedPython>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"

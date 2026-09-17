@@ -1,0 +1,1 @@
+result = ParentClass.__subclasses__()
