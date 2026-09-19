@@ -38,7 +38,7 @@ if __name__ == '__main__':
     filenames = [str(f) for f in corpus_path.iterdir() if f.is_file()]
     corpus = build_corpus(filenames)
     
-    sc = next((item for item in corpus if item.get("id") == "1_subclasses"), None)
+    sc = next((item for item in corpus if item.get("id") == "9_out_file_io"), None)
 
     if (stat==0):
         analyzer = StaticAnalyzer(config)

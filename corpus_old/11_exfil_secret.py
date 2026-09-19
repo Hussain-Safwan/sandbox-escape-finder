@@ -1,5 +1,5 @@
 # Configuration to toggle which channels leak the secret during testing
-import sys
+
 LEAK_CONFIG = {
     "leak_stdout": False,
     "leak_stderr": True,
@@ -13,7 +13,8 @@ def attempt_exfiltration():
         print(f"[EXFILTRATION OUTPUT] Found secret: {secret}")
 
     if LEAK_CONFIG["leak_stderr"]:
-        sys.stderr.write(f"Critical failure occurred: {secret}")
+        pass
+        # sys.stderr.write(f"Critical failure occurred: {secret}")
         
     return "SUCCESS_NO_LEAK"
 

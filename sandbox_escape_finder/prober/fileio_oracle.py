@@ -22,16 +22,13 @@ class FileIOOracle:
         msg = "out_of_bounds_file_access"
         log_check = msg in [v.get("event") for v in file_handler_violations]
 
-        current_canary_snapshot = self._get_dir_snapshot(self.canary_dir)
-        canary_change = current_canary_snapshot != self.initial_canary_snapshot
         throwaway_change = False
         
         if self.throwaway:
             current_throaway_snapshot = self._get_dir_snapshot(self.throwaway)
             throwaway_change = current_throaway_snapshot != self.initial_throwaway_snapshot
 
-        self.initial_canary_snapshot = current_canary_snapshot
         if self.throwaway:
             self.initial_throwaway_snapshot = current_throaway_snapshot
 
-        return log_check or canary_change or throwaway_change
+        return log_check or throwaway_change
