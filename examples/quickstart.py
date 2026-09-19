@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import pprint
+import random
 
 from sandbox_escape_finder import StaticAnalyzer, DynamicProber
 from sandbox_escape_finder.prober import HarnessWrapper
@@ -8,38 +9,56 @@ from sandbox_escape_finder.prober.oracle import Oracle
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 
-def get_payload(filename):
-    source_code = ''
-    with open(filename, "r") as file:
-        source_code = file.read()
+class CorpusLoader:
     
-    return source_code
+    def __init__(self, corpus_path, seed=0):
+        self.corpus = []
+        self.corpus_path = corpus_path
+        self.seed = seed
+        self.build_corpus()
 
-def build_corpus(filenames):
-    corpus = []
-    
-    for filename in filenames:
-        source_code = get_payload(filename)
-        corpus.append({
-            "id": Path(filename).stem, 
-            "payload": source_code
-        })
+    def get_code(self, filename):
+        source_code = ''
+        with open(filename, "r") as file:
+            source_code = file.read()
         
-    return corpus
+        return source_code
+
+    def build_corpus(self):
+        _corpus_path = Path(self.corpus_path)
+        filenames = sorted(
+            (f for f in _corpus_path.iterdir() if f.is_file()),
+            key=lambda f: int(f.stem.split("_", 1)[0]),
+        )
+        random.Random(self.seed).shuffle(filenames)
+              
+        for filename in filenames:
+            source_code = self.get_code(filename)
+            self.corpus.append({
+                "id": filename.stem, 
+                "payload": source_code
+            })
+                
+    def get_corpus(self):
+        return self.corpus
+    
+    def get_payload(self, id):
+        return next((item for item in self.corpus if item.get("id") == id), None)
 
 if __name__ == '__main__':
-    config = {}
-
+    config = []
+    with open(CONFIG_PATH, 'r') as config_json:
+        config = json.load(config_json)
+     
     stat = 1
-    with open(CONFIG_PATH, 'r') as config_file:
-        config = json.load(config_file)
-
-    corpus_path = Path(config.get("corpus_path"))
-    filenames = [str(f) for f in corpus_path.iterdir() if f.is_file()]
-    corpus = build_corpus(filenames)
+    corpus_loader = CorpusLoader(
+        config.get("corpus_path", ""),
+        config.get("seed", 0),
+    )
+    corpus = corpus_loader.get_corpus()
     
-    sc = next((item for item in corpus if item.get("id") == "9_out_file_io"), None)
-
+    sc = corpus_loader.get_payload("9_workdir_file_io")
+    print(sc)
     if (stat==0):
         analyzer = StaticAnalyzer(config)
         findings = analyzer.scan(sc.get("payload"))
@@ -55,6 +74,6 @@ if __name__ == '__main__':
         
         oracle = Oracle(config)
         prober = DynamicProber(harness.run_isolated_payload, oracle, config)
-        report = prober.run([sc])
+        report = prober.run(corpus)
         
         pprint.pprint(report, sort_dicts=False)

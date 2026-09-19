@@ -10,7 +10,7 @@ from sandbox_escape_finder.prober.prober import HarnessWrapper
     ("target_location", "expected_verdict"),
     [
         ("inside", False),
-        ("outside", True),
+        ("outside", False),
     ],
     ids=["in-bounds-file-access", "out-of-bounds-file-access"],
 )

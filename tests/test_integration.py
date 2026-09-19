@@ -9,7 +9,7 @@ from sandbox_escape_finder.prober.oracle import Oracle
 def test_full_corpus_against_restricted_python():
     repository = Path(__file__).resolve().parents[1]
     corpus_files = sorted(
-        (repository / "corpus_old").glob("*.py"),
+        (repository / "corpus").glob("*.py"),
         key=lambda path: int(path.stem.split("_", 1)[0]),
     )
     corpus = [
