@@ -38,8 +38,8 @@ if __name__ == '__main__':
     filenames = [str(f) for f in corpus_path.iterdir() if f.is_file()]
     corpus = build_corpus(filenames)
     
-    sc = next((item for item in corpus if item.get("id") == "5_format"), None)
-    
+    sc = next((item for item in corpus if item.get("id") == "1_subclasses"), None)
+
     if (stat==0):
         analyzer = StaticAnalyzer(config)
         findings = analyzer.scan(sc.get("payload"))
@@ -49,7 +49,8 @@ if __name__ == '__main__':
     else:
         harness = HarnessWrapper(
             config.get("workspace_dir"),
-            config.get("canary_dir")
+            config.get("canary_dir"),
+            config.get("import_whitelist")
         )
         
         oracle = Oracle(config)

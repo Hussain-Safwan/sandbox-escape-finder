@@ -1,16 +1,13 @@
 import ast
 from string import Formatter
+from pathlib import Path
 
 generator_attr = {"f_locals", "f_globals", "f_builtins"}
 generator_values = {"gi_frame", "cr_frame", "ag_frame", "tb_frame"}
-import_blacklist = ['os', 'sys']
 compression_classes = ['base64', 'zlib', 'gzip', 'bz2', 'lzma']
 common_methods = {"print", "open", "input", "eval", "exec"}
-suspicious_modules = {
-            "os", "sys", "subprocess", "shutil", "ctypes", 
-            "importlib", "pathlib", "socket", "threading", "multiprocessing"
-        }
-file_builtins = {"open", "file", "exec", "eval", "compile"}
+
+file_builtins = {"open", "file"}
     
 file_attributes = {
         "read", "readline", "readlines", "write", "writelines",
@@ -24,17 +21,21 @@ class Report():
     technique = None
     source = ''
     line = ''
-    colum = ''
+    column = ''
     confidence = 0.0
 
     def __repr__(self):
-        return f"\n(Report: \n\ttechnique={self.technique}, \n\tsource={self.source}, \n\tlocation=(line={self.line}, colum={self.colum})\n\tconfidence={self.confidence})\n"
+        return f"\n(Report: \n\ttechnique={self.technique}, \n\tsource={self.source}, \n\tlocation=(line={self.line}, column={self.column})\n\tconfidence={self.confidence})\n"
 
 class ASTWrapper(ast.NodeVisitor): 
 
-    def __init__(self, source):
+    def __init__(self, source, import_whitelist, workspace_dir):
         self.source = source
         self.depth = 0
+        self.import_whitelist = import_whitelist
+        self.workspace_dir = workspace_dir
+        self.reports = []
+        self.reports = []
 
     def inspect_format_access(self, node):
         if not (
@@ -99,42 +100,66 @@ class ASTWrapper(ast.NodeVisitor):
         
     def inspect_exec_eval_calls(self, node):
         argument = node.args[0]
-        result = None
-        
+
         if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
-            if ('\n' in argument.value):
-                lines = [x.strip() for x in argument.value.split('\n') if x and ('import' in x)]
-                import_lines = [x.replace('import', '').strip() for x in lines]
-                for item in import_lines:
-                    if (item in import_blacklist):
-                        result = 'Exec abuse (Suspicious import)'
-        
-        elif isinstance(argument, ast.Call):
-            function = argument.func
+            try:
+                inner_tree = ast.parse(argument.value)
+                for n in ast.walk(inner_tree):
+                    if isinstance(n, ast.Import):
+                        modules = [alias.name for alias in n.names]
 
-            if isinstance(function, ast.Name):
-                pass  
+                    elif isinstance(n, ast.ImportFrom):
+                        modules = [n.module] if n.module else []
 
-            elif isinstance(function, ast.Attribute):
-                pass 
+                    else:
+                        continue
 
-                if isinstance(function.value, ast.Name):
-                    result = 'Exec abuse (Compression operation)'
-        
-        elif isinstance(argument, ast.Name):
-            print("Code supplied through variable:", argument.id)
-            
-        return result
+                    if any(module not in self.import_whitelist for module in modules):
+                        return "Exec/eval with import", 0.9
+            except SyntaxError:
+                pass
+
+        if (
+            isinstance(argument, ast.Call)
+            and isinstance(argument.func, ast.Attribute)
+            and isinstance(argument.func.value, ast.Name)
+            and argument.func.value.id in compression_classes
+        ):
+            return "Exec/eval with compression", 0.9
+
+        return "Exec/eval usage", 0.5
     
     def inspect_file_io(self, node):
-        file_io_detected = False
+        path_node = None
+
         if isinstance(node.func, ast.Name) and node.func.id in file_builtins:
-            file_io_detected = True
+            if node.args:
+                path_node = node.args[0]
 
         elif isinstance(node.func, ast.Attribute) and node.func.attr in file_attributes:
-            file_io_detected = True
-            
-        return file_io_detected
+            receiver = node.func.value
+            if (
+                isinstance(receiver, ast.Call)
+                and receiver.args
+                and (
+                    (isinstance(receiver.func, ast.Name) and receiver.func.id == "Path")
+                    or (
+                        isinstance(receiver.func, ast.Attribute)
+                        and receiver.func.attr == "Path"
+                    )
+                )
+            ):
+                path_node = receiver.args[0]
+
+        if not isinstance(path_node, ast.Constant) or not isinstance(path_node.value, str):
+            return False
+
+        workspace = Path(self.workspace_dir).resolve()
+        target = Path(path_node.value)
+        if not target.is_absolute():
+            target = workspace / target
+
+        return not target.resolve().is_relative_to(workspace)
     
     def add_report(self, technique, confidence, node):
         report = Report()
@@ -146,9 +171,9 @@ class ASTWrapper(ast.NodeVisitor):
             src = f"{ast.get_source_segment(self.source, node)!r}"
             report.source = src
             report.line = node.lineno
-            report.colum = node.col_offset
+            report.column = node.col_offset
             
-        reports.append(report)
+        self.reports.append(report)
     
     def generic_visit(self, node):
 
@@ -193,9 +218,8 @@ class ASTWrapper(ast.NodeVisitor):
                 and node.func.id in {"exec", "eval"}
                 and node.args
             ):
-                is_exec_abused = self.inspect_exec_eval_calls(node)
-                if (is_exec_abused):
-                    self.add_report(is_exec_abused, 0.5, node)
+                result, score = self.inspect_exec_eval_calls(node)
+                self.add_report(result, score, node)
                     
             # Pattern 9: File Activies
             if self.inspect_file_io(node):
@@ -211,15 +235,12 @@ class ASTWrapper(ast.NodeVisitor):
             
         # Pattern 8: Suspicious imports
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            print('Import', [name.name for name in node.names])
             for alias in node.names:
-                if (alias.name in suspicious_modules):
+                if (alias.name not in self.import_whitelist):
                     self.add_report(f"Suspicious import ({alias.name})", 0.9, node)
-                else:
-                    self.add_report(f"Benign import ({alias.name})", 0.3, node)
                 
             if isinstance(node, ast.ImportFrom):
-                if (node.module in suspicious_modules):
+                if (node.module not in self.import_whitelist):
                     self.add_report(f"Suspicious import ({node.module})", 0.9, node)
                                     
         self.depth += 1
@@ -233,11 +254,12 @@ class StaticAnalyzer:
         
     def scan(self, payload):
         tree = ast.parse(payload)
-        
-        ASTWrapper(payload).visit(tree)
-        
-        return reports
+        import_whitelist = self.config.get("import_whitelist", [])
+        workspace_dir = self.config.get("workspace_dir", ".")
+        wrapper = ASTWrapper(payload, import_whitelist, workspace_dir)
+        wrapper.visit(tree)
+
+        return wrapper.reports
     
 
     
-

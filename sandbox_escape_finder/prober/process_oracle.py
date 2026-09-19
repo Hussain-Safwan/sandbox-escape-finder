@@ -6,6 +6,7 @@ CRITICAL_PROCESS_EVENTS = {
     "os.exec",
     "os.spawn",
     "os.posix_spawn",
+    "os.listdir",
     "subprocess.Popen",
     "pty.spawn",
     "winreg.OpenKey",

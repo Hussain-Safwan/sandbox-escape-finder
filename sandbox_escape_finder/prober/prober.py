@@ -1,18 +1,25 @@
+import io
 import multiprocessing as mp
+import os
+import threading
+from contextlib import redirect_stdout, redirect_stderr
+
 from .execute import Execution
 from ..analyzer import StaticAnalyzer
 from .process_oracle import ProcessAuditHookManager
 
 class HarnessWrapper:
     
-    def __init__(self, workspace_dir, canary_dir):
+    def __init__(self, workspace_dir, canary_dir, import_whitelist):
         self.workspace_dir = workspace_dir
         self.canary_dir = canary_dir
+        self.import_whitelist = import_whitelist
         
     def _worker_target(self, payload_code, return_dict):
         try:
             ProcessAuditHookManager.install()
-            executor = Execution(payload_code, self.workspace_dir, self.canary_dir)
+            os.chdir(self.workspace_dir)
+            executor = Execution(payload_code, self.workspace_dir, self.canary_dir, self.import_whitelist)
             return_value = executor.execute_payload()
             
             return_dict["status"] = return_value.get("status")
@@ -27,6 +34,50 @@ class HarnessWrapper:
             return_dict["violations"] = []
             return_dict["execution_data"] = ""
             return_dict["audit_data"] = ""
+            
+    def run_regular_payload(self, payload):
+        ProcessAuditHookManager.install()
+        current_thread_id = threading.get_ident()
+        ProcessAuditHookManager.register_thread(current_thread_id)
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        status = None
+        runtime_execption = None
+        audit_data = ''
+        
+        try:
+    
+            with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+                exec(payload)
+            status = 'SUCCESS'
+                    
+        except Exception as e:
+            runtime_execption = e
+            status = 'BLOCKED'
+            err_type = type(runtime_execption).__name__
+            if ( err_type == 'NameError' or err_type == 'AttributeError'):
+                self.runtime_violations.append({
+                    "event": "invalid_access_attempt",
+                    "details": str(runtime_execption)
+                })
+        finally:    
+            audit_data = ProcessAuditHookManager.unregister_thread(current_thread_id)
+                                         
+        execution_data = {
+            "status": status,
+            "stdout": stdout_buffer.getvalue(),
+            "stderr": stderr_buffer.getvalue(),
+            "error": str(runtime_execption) if runtime_execption else None
+        }
+                
+        return_dict = {
+            "status": status, 
+            "execution_data": str(execution_data), 
+            "audit_data": audit_data,
+        }
+                
+        return return_dict
+        
 
     def run_isolated_payload(self, payload_code, timeout=2.0):
         manager = mp.Manager()
@@ -83,7 +134,10 @@ class DynamicProber:
             static_analyzer = StaticAnalyzer(self.config)
             flags = static_analyzer.scan(payload)
             
-            execution_result = self.sandbox_exec(payload, self.config['timeout'])
+            execution_result = self.sandbox_exec(
+                payload, 
+                self.config.get("timeout", 2.0),
+            )
                     
             if (execution_result.get("status", "") == "SUCCESS"):
                 print(f'[Prober] id={item.get("id")} status=Complete') 
@@ -95,16 +149,20 @@ class DynamicProber:
 
             if "violations" in execution_result:
                 del execution_result["violations"]
-                    
+
             oracle_verdict = self.oracle.run(execution_result, audit_data, violations)
             
             self.report.append({
-                "static_analyzer_verdict": "PASSED" if len(flags) == 0 else "FLAGGED",
-                "static_analyzer_technique": [flag.technique for flag in flags] if len(flags) > 0 else None,
-                "execution_status": "PASSED" if execution_result.get("status", "") == "SUCCESS" else "BLOCKED",
-                "execution_outcome": execution_result.get("execution_data", ""),
-                "runtime_violations": [v.get("event", "") for v in violations] if len(violations) > 0 else None,
-                "oracle_verdict": oracle_verdict
+                "id": item.get("id"),
+                "analyzer_findings": flags,
+                "prober_report": {
+                    "static_analyzer_verdict": "PASSED" if len(flags) == 0 else "FLAGGED",
+                    "static_analyzer_technique": [flag.technique for flag in flags] if len(flags) > 0 else None,
+                    "execution_status": "PASSED" if execution_result.get("status", "") == "SUCCESS" else "BLOCKED",
+                    "execution_outcome": execution_result.get("execution_data", ""),
+                    "runtime_violations": [v.get("event", "") for v in violations] if len(violations) > 0 else None,
+                    "oracle_verdict": oracle_verdict
+                }
             })
             
         return self.report

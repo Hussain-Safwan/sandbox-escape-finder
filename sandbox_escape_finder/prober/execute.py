@@ -25,8 +25,9 @@ class SandboxSecurityError(Exception):
     pass
 
 class Execution:
-    def __init__(self, payload, workspace_dir, canary_dir):
+    def __init__(self, payload, workspace_dir, canary_dir, import_whitelist):
         self.payload = payload
+        self.import_whitelist = import_whitelist
         self.runtime_violations = []
         self.workspace_dir = Path(workspace_dir).resolve()
         self.canary_dir = Path(canary_dir).resolve()
@@ -35,11 +36,6 @@ class Execution:
         self.forbidden_attrs = {
             "__subclasses__", "__globals__", "__closure__", "__builtins__", "__metaclass__", 
             "gi_frame", "cr_frame", "ag_frame", "tb_frame"
-        }
-        
-        self.suspicious_modules = {
-            "os", "sys", "subprocess", "shutil", "ctypes", 
-            "importlib", "pathlib", "socket", "threading", "multiprocessing"
         }
 
     def is_safe_path(self, target):
@@ -105,7 +101,7 @@ class Execution:
         return default_guarded_getitem(obj, key)
     
     def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0, runtime_violations=None):
-        if name in self.suspicious_modules:
+        if name not in self.import_whitelist:
             self.runtime_violations.append({
                 "event": "suspicious_import",
                 "module": name,
