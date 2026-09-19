@@ -2,7 +2,7 @@
     "timeout": 2.0,
     "workspace_dir": ".",
     "canary_dir": "./canary",
-    "corpus_path": "./corpus_old",
+    "corpus_path": "./corpus",
     "import_whitelist": ["math", "random", "datetime", "json", "re", "collections", "itertools", "functools", "typing", "string"],
     "secrets": {
         "SECRET_1": "XYZ123", 
