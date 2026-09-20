@@ -36,7 +36,7 @@ python examples/quickstart.py
 ```
 
 The example loads `config.json`, runs the payload corpus in an isolated RestrictedPython
-process, and prints its static-analysis, execution data, and oracle results.
+process, and prints its static-analysis, execution data, and oracle results. Persistent `JSON` execution reports are preserved in the `reports` directory.
 
 ## Architecture
 
@@ -128,6 +128,7 @@ from the repository root.
 | `seed` | Seed used to produce a reproducible shuffled payload order. |
 | `workspace_dir` | Directory in which payloads execute and may perform allowed file operations. |
 | `canary_dir` | Safe destination used when an out-of-workspace file path is redirected. |
+| `reports_dir` | Directory where generated analyzer and end-to-end JSON reports are saved. |
 | `throwaway_dir` | Optional directory monitored by the file oracle for unexpected changes. |
 | `corpus_path` | Directory containing the payload corpus loaded by the quickstart. |
 | `import_whitelist` | Modules that payloads are allowed to import. All other imports are blocked and reported. |
@@ -141,6 +142,7 @@ Example:
   "seed": 1337,
   "workspace_dir": ".",
   "canary_dir": "./canary",
+  "reports_dir": "./reports",
   "corpus_path": "./corpus",
   "import_whitelist": ["math", "random", "json"],
   "secrets": {
@@ -155,22 +157,22 @@ Example:
 The `corpus/` directory contains 14 payloads covering escape techniques,
 benign controls, and runtime-failure cases. The extensionless filename (e.g., `1_subclasses`) serves as the `Payload ID`.
 
-| Payload ID | Category | Purpose |
-|---|---|---|
-| `1_subclasses` | Introspection | Attempts to enumerate classes through `__subclasses__`. |
-| `2_access` | Function state | Attempts to read globals and closure contents from exposed functions. |
-| `3_builtins` | Builtins restoration | Attempts to recover `__builtins__` through a function's globals. |
-| `4_format` | Format-string access | Attempts to read a private attribute through `str.format`. |
-| `5_exec` | Encoded execution | Attempts to decode and execute a Base64-encoded command payload. |
-| `6_benign_exec` | Benign control | Uses dynamic execution to import an allowlisted module. |
-| `7_builtin_shadow` | Builtin shadowing | Replaces the `print` name with a user-defined function. |
-| `8_out_file_io` | File access | Attempts to write to an absolute path outside the workspace. |
-| `9_workdir_file_io` | Benign control | Writes a file inside the configured workspace. |
-| `10_exfil_secret` | Exfiltration | Exercises configurable secret-leak channels. |
-| `11_exfil_frame` | Frame introspection | Attempts to recover a secret from a generator frame. |
-| `12_timeout` | DoS | Runs an infinite loop to exercise timeout enforcement. |
-| `13_crash` | Program failure | Raises an exception to exercise crash reporting. |
-| `14_subprocess` | System operation | Attempts to execute an operating-system command. |
+| Payload ID | Category | Purpose | RestrictedPython sufficiency |
+|---|---|---|---|
+| `1_subclasses` | Introspection | Attempts to enumerate classes through `__subclasses__`. | **Yes.** RestrictedPython rejects access to underscore-prefixed attributes. |
+| `2_access` | Function state | Attempts to read globals and closure contents from exposed functions. | **Yes.** Access to `__globals__` and `__closure__` is rejected. |
+| `3_builtins` | Builtins restoration | Attempts to recover `__builtins__` through a function's globals. | **Yes.** The required private function state is inaccessible. |
+| `4_format` | Format-string access | Attempts to read a private attribute through `str.format`. | **Yes.** Private attribute traversal through format fields is blocked. |
+| `5_exec` | Encoded execution | Attempts to decode and execute a Base64-encoded command payload. | **Yes.** Dynamic `exec` is unavailable in restricted code. |
+| `6_benign_exec` | Benign control | Uses dynamic execution to import an allowlisted module. | **Yes, but over-restrictive.** RestrictedPython blocks `exec` even when the inner code is harmless. |
+| `7_builtin_shadow` | Builtin shadowing | Replaces the `print` name with a user-defined function. | **Yes.** RestrictedPython rejects the attempted replacement of its controlled print behavior. |
+| `8_out_file_io` | File access | Attempts to write to an absolute path outside the workspace. | **Yes by default.** RestrictedPython does not expose `open`; when this project exposes it, `safe_open` redirects out-of-bounds paths to the canary directory. |
+| `9_workdir_file_io` | Benign control | Writes a file inside the configured workspace. | **Not applicable.** This is intended behavior enabled through `safe_open`, which permits paths inside the workspace. |
+| `10_exfil_secret` | Exfiltration | Exercises configurable secret-leak channels. | **No.** RestrictedPython does not identify sensitive values in allowed output; captured output and the exfiltration oracle detect configured secrets. |
+| `11_exfil_frame` | Frame introspection | Attempts to recover a secret from a generator frame. | **Yes.** RestrictedPython blocks access to generator and frame internals. |
+| `12_timeout` | DoS | Runs an infinite loop to exercise timeout enforcement. | **No.** RestrictedPython does not limit execution time; the subprocess timeout terminates the worker. |
+| `13_crash` | Program failure | Raises an exception to exercise crash reporting. | **No.** RestrictedPython does not prevent deliberate exceptions; the harness contains the failure and records it. |
+| `14_subprocess` | System operation | Attempts to execute an operating-system command. | **Yes by default.** Imports are unavailable unless the host exposes them; this project adds an import allowlist and audit monitoring. |
 
 ## Results Matrix
 
