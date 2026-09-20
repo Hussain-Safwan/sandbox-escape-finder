@@ -1,7 +1,9 @@
 {
     "timeout": 2.0,
+    "seed": 1337,
     "workspace_dir": ".",
     "canary_dir": "./canary",
+    "reports_dir": "./reports",
     "corpus_path": "./corpus",
     "import_whitelist": ["math", "random", "datetime", "json", "re", "collections", "itertools", "functools", "typing", "string"],
     "secrets": {

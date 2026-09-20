@@ -75,5 +75,5 @@ if __name__ == '__main__':
         oracle = Oracle(config)
         prober = DynamicProber(harness.run_isolated_payload, oracle, config)
         report = prober.run(corpus)
-        
+        # corpus_loader.get_payload("1_subclasses")
         pprint.pprint(report, sort_dicts=False)

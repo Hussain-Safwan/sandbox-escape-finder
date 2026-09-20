@@ -23,6 +23,17 @@ class Report():
     line = ''
     column = ''
     confidence = 0.0
+    
+    def to_dict(self):
+        return {
+            "technique": self.technique,
+            "source": self.source,
+            "location": {
+                "line": self.line,
+                "column": self.column,
+            },
+            "confidence": self.confidence,
+        }
 
     def __repr__(self):
         return f"\n(Report: \n\ttechnique={self.technique}, \n\tsource={self.source}, \n\tlocation=(line={self.line}, column={self.column})\n\tconfidence={self.confidence})\n"

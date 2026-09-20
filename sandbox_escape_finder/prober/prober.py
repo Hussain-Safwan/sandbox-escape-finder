@@ -1,7 +1,10 @@
 import io
 import multiprocessing as mp
 import os
+import time
 import threading
+import json
+from datetime import datetime, timezone
 from contextlib import redirect_stdout, redirect_stderr
 
 from .execute import Execution
@@ -125,19 +128,40 @@ class DynamicProber:
         self.sandbox_exec = sandbox_exec
         self.oracle = oracle
         self.config = config
+        self.reports_dir = config.get("reports_dir", "./")
         self.report = []
+        
+    def write_reports(self):
+        timestamp = datetime.now(timezone.utc).timestamp()
+
+        filename = f"e2e_{timestamp}".replace(".", "") + ".json"
+        
+        for x in self.report:
+            serialized = []
+            for y in x["analyzer_findings"]:
+                serialized.append(y.to_dict())
+            x["analyzer_findings"] = serialized
+        
+        with open(f"{self.reports_dir}/{filename}", "w") as f:
+            json.dump(self.report, f, indent=2)   
+            
+        print(f"Reports written to {filename}") 
     
     def run(self, payload_corpus):
         for item in payload_corpus:
             payload = item.get("payload")
             
+            time_static_start = time.perf_counter()
             static_analyzer = StaticAnalyzer(self.config)
             flags = static_analyzer.scan(payload)
+            time_static_end = time.perf_counter()
             
+            time_exec_start = time.perf_counter()
             execution_result = self.sandbox_exec(
                 payload, 
                 self.config.get("timeout", 2.0),
             )
+            time_exec_end = time.perf_counter()
                     
             if (execution_result.get("status", "") == "SUCCESS"):
                 print(f'[Prober] id={item.get("id")} status=Complete') 
@@ -150,9 +174,11 @@ class DynamicProber:
             if "violations" in execution_result:
                 del execution_result["violations"]
 
+            time_oracle_start = time.perf_counter()
             oracle_verdict = self.oracle.run(execution_result, audit_data, violations)
+            time_oracle_end = time.perf_counter()
             
-            self.report.append({
+            current_report = {
                 "id": item.get("id"),
                 "analyzer_findings": flags,
                 "prober_report": {
@@ -162,9 +188,17 @@ class DynamicProber:
                     "execution_outcome": execution_result.get("execution_data", ""),
                     "runtime_violations": [v.get("event", "") for v in violations] if len(violations) > 0 else None,
                     "oracle_verdict": oracle_verdict
+                },
+                "timings": {
+                    "analyzer": f"{(time_static_end - time_static_start) * 1000} ms",
+                    "execution": f"{(time_exec_end - time_exec_start) * 1000} ms",
+                    "oracle": f"{(time_oracle_end - time_oracle_start) * 1000} ms"  
                 }
-            })
+            }
             
+            self.report.append(current_report)
+        
+        self.write_reports()    
         return self.report
             
             
