@@ -46,20 +46,22 @@ class CorpusLoader:
         return next((item for item in self.corpus if item.get("id") == id), None)
 
 if __name__ == '__main__':
-    config = []
+    # set stat=0 to run StaticAnalyzer only, stat=1 for entire end-to-end pipeline
+    stat = 1
+    config = {}
     with open(CONFIG_PATH, 'r') as config_json:
         config = json.load(config_json)
      
-    stat = 1
     corpus_loader = CorpusLoader(
         config.get("corpus_path", ""),
         config.get("seed", 0),
     )
     corpus = corpus_loader.get_corpus()
     
-    sc = corpus_loader.get_payload("9_workdir_file_io")
-    print(sc)
     if (stat==0):
+        
+        # enter the payload id from the corpus below - StaticAnalyzer takes singular payloads
+        sc = corpus_loader.get_payload("1_subclasses")
         analyzer = StaticAnalyzer(config)
         findings = analyzer.scan(sc.get("payload"))
         
@@ -75,5 +77,5 @@ if __name__ == '__main__':
         oracle = Oracle(config)
         prober = DynamicProber(harness.run_isolated_payload, oracle, config)
         report = prober.run(corpus)
-        # corpus_loader.get_payload("1_subclasses")
+
         pprint.pprint(report, sort_dicts=False)
